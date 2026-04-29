@@ -1,23 +1,17 @@
-// Хранилище (localStorage как база для демонстрации, но при желании заменишь на Cloudflare KV)
-let games = [];
-
-function loadGames() {
-    const stored = localStorage.getItem('game_market_games');
-    if(stored) {
-        games = JSON.parse(stored);
-    } else {
-        // Пример: пустой массив — ты сам добавишь игры через админку
-        games = [];
-        saveGames();
+// Загрузка игр с Cloudflare KV через API
+async function loadGames() {
+    try {
+        const response = await fetch('/api/games');
+        const games = await response.json();
+        renderGames(games);
+        return games;
+    } catch (error) {
+        console.error('Ошибка загрузки игр:', error);
+        return [];
     }
-    renderGames();
 }
 
-function saveGames() {
-    localStorage.setItem('game_market_games', JSON.stringify(games));
-}
-
-function renderGames() {
+async function renderGames(games) {
     const grid = document.getElementById('games-grid');
     if(grid) {
         const featured = games.slice(0, 6);
@@ -41,28 +35,35 @@ function renderGames() {
     if(detailContainer) {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('id');
-        const game = games.find(g => g.id == gameId);
-        if(game) {
-            detailContainer.innerHTML = `
-                <div class="game-detail-card">
-                    <img src="${game.iconUrl}" class="game-icon-large">
-                    <h2>${game.title}</h2>
-                    <p>${game.description}</p>
-                    <div class="game-price">${game.price == 0 ? 'Бесплатно' : `$${game.price}`}</div>
-                    <button id="play-game-btn" class="btn-primary">Играть</button>
-                </div>
-                <div id="game-iframe-container" style="display:none; margin-top:2rem;">
-                    <iframe src="" width="100%" height="500" frameborder="0" allowfullscreen></iframe>
-                </div>
-            `;
-            document.getElementById('play-game-btn').addEventListener('click', () => {
-                const container = document.getElementById('game-iframe-container');
-                const iframe = container.querySelector('iframe');
-                iframe.src = game.gameUrl;
-                container.style.display = 'block';
-            });
-        } else {
-            detailContainer.innerHTML = '<p>Игра не найдена</p>';
+        
+        try {
+            const response = await fetch(`/api/games/${gameId}`);
+            const game = await response.json();
+            
+            if(game && !game.error) {
+                detailContainer.innerHTML = `
+                    <div class="game-detail-card">
+                        <img src="${game.iconUrl}" class="game-icon-large" onerror="this.src='/default-icon.png'">
+                        <h2>${game.title}</h2>
+                        <p>${game.description}</p>
+                        <div class="game-price">${game.price == 0 ? 'Бесплатно' : `$${game.price}`}</div>
+                        <button id="play-game-btn" class="btn-primary">Играть</button>
+                    </div>
+                    <div id="game-iframe-container" style="display:none; margin-top:2rem;">
+                        <iframe src="" width="100%" height="600" frameborder="0" allowfullscreen></iframe>
+                    </div>
+                `;
+                document.getElementById('play-game-btn').addEventListener('click', () => {
+                    const container = document.getElementById('game-iframe-container');
+                    const iframe = container.querySelector('iframe');
+                    iframe.src = game.gameUrl;
+                    container.style.display = 'block';
+                });
+            } else {
+                detailContainer.innerHTML = '<p>Игра не найдена</p>';
+            }
+        } catch (error) {
+            detailContainer.innerHTML = '<p>Ошибка загрузки игры</p>';
         }
     }
 }
@@ -71,7 +72,7 @@ function createGameCard(game) {
     const priceText = game.price == 0 ? '<span class="free-badge">Бесплатно</span>' : `$${game.price}`;
     return `
         <div class="game-card" data-id="${game.id}">
-            <img class="game-icon" src="${game.iconUrl}" alt="${game.title}">
+            <img class="game-icon" src="${game.iconUrl}" alt="${game.title}" onerror="this.src='/default-icon.png'">
             <div class="game-title">${game.title}</div>
             <div class="game-price">${priceText}</div>
         </div>
